@@ -8,6 +8,9 @@ local GRID_HEIGHT = g.rows
 local GRID_WIDTH = g.cols
 local MAX_TRACKS = g.rows/2 -- 2 rows per track required
 local MAX_BEATS = g.cols -- last column is meta-button
+
+local RUNNING = true
+
 local GRID_KEYS = {}
 for x=1, GRID_WIDTH do
   GRID_KEYS[x] = {}
@@ -16,7 +19,18 @@ for x=1, GRID_WIDTH do
   end
 end
 
-local RUNNING = true
+function grid_key_held(x,y)
+  GRID_KEYS[x][y].down = true
+  GRID_KEYS[x][y].last_down = util.time()
+end
+
+function grid_key_released(x,y)
+  GRID_KEYS[x][y].down = false
+  GRID_KEYS[x][y].last_up = util.time()
+  return GRID_KEYS[x][y].last_up - GRID_KEYS[x][y].last_down
+end
+
+
 -- beat and subbeat are both cycle type tables
 -- build a cycle class that puts itself on the end of the table
 -- through iterations, keeps track of index of item.
@@ -94,11 +108,6 @@ function Cycle:from_table(t)
   end
 end
 
-function Cycle:reset()
-  self.index = 0
-  self.cycled = false
-end
-
 function Cycle:next()
   self.index = self.index + 1
   if self.index > self.length then 
@@ -108,6 +117,11 @@ function Cycle:next()
     self.cycled = false
   end
   return self[self.index]
+end
+
+function Cycle:reset()
+  self.index = 0
+  self.cycled = false
 end
 
 function Cycle:set_length(l)
@@ -143,14 +157,15 @@ function SubBeat:toggle()
   self.on = not self.on
 end
 
-local Beat = {on = true, subs = {}}
+local Beat = {on = true, speed = 1, subs = {}, sub_beat = nil}
 function Beat:new()
   local o = {}
   self.__index = self
   setmetatable(o, self)
   o.on = true
+  o.speed = 1
   o.subs = Cycle:new(SubBeat, 1)
-  o.sub_beat = o.subs[1]
+  o.sub_beat = o.subs:next()
   return o
 end
 
@@ -159,48 +174,55 @@ function Beat:toggle()
 end
 
 function make(track)
+  local n = 1
+  local d = 1
   while true do
-    clock.sync(track.speed/(#track.beat.subs))
+    clock.sync(n/d)
+    -- lazy clock sync updating
+    -- for alligned sub-beats when
+    -- current beat is advanced.
+    n = track.beat.speed
+    d = #track.beat.subs
+    track:draw()
     if track.beat.on and track.beat.sub_beat.on then
       engine.trig(track.num)
     end
     track:advance()
-    track:draw()
   end
 end
 
-local Track = {num = 1, speed = 1, beat = nil, beats = {}, clk = nil}
+local Track = {num = 1, beat = nil, beats = {}, clk = nil}
 function Track:new(num, default_beats)
   local o = {}
   self.__index = self
   setmetatable(o, self)
   o.num = num
-  o.speed = 1
   o.beats = Cycle:new(Beat, default_beats)
-  o.beat = o.beats[1]
+  o.beat = o.beats:next()
   o.clk = clock.run(make, o)
   return o
 end
 
-function Track:advance()
+function Track:advance_sub()
   self.beat.sub_beat = self.beat.subs:next()
+end
+
+function Track:advance_beat()
+  self.beat = self.beats:next()
+end
+
+function Track:advance()
+  self:advance_sub()
   if self.beat.subs.cycled then
-    self.beat = self.beats:next()
+    self:advance_beat()
   end
 end
 
 function Track:reset()
   self.beats:reset()
-  self.beat = self.beats[1]
+  self.beat = self.beats:next()
   self.beat.subs:reset()
-  self.beat.sub_beat = self.beat.subs[1]
-  self:draw()
-end
-
-function Track:update_clock()
-  -- print("Track:updateClock()")
-  clock.cancel(self.clk)
-  self.clk = clock.run(make, self)
+  self.beat.sub_beat = self.beat.subs:next()
 end
 
 function Track:start_clock()
@@ -222,11 +244,6 @@ function Track:select(beats_or_subs, x)
   elseif beats_or_subs.type == SubBeat then
     self.beat.subs[x]:toggle()
   end
-end
-
-function Track:toggle_beat(n)
-  -- print("Track:toggleBeat()")
-  self.beats[n].on = not self.beats[n].on
 end
 
 function Track:draw()
@@ -280,6 +297,7 @@ function Pattern:start()
   for i=1, 4 do
     self.tracks[i]:reset()
     self.tracks[i]:start_clock()
+    self.tracks[i]:draw()
   end
   RUNNING = true
 end
@@ -287,6 +305,7 @@ end
 function Pattern:stop()
   for i=1, 4 do
     self.tracks[i]:stop_clock()
+    self.tracks[i]:draw()
   end
   RUNNING = false
 end
@@ -298,39 +317,28 @@ function init()
   engine.loadSample(1, "/home/we/dust/audio/common/606/606-BD.wav")
   engine.loadSample(2, "/home/we/dust/audio/common/606/606-SD.wav")
   engine.loadSample(3, "/home/we/dust/audio/common/606/606-CH.wav")
-  p = Pattern:new(4, 5)
-  --t = Track:new(1, 4)
+  engine.loadSample(4, "/home/we/dust/audio/common/606/606-OH.wav")
+  p = Pattern:new(4, 4)
 end
 
 function g.key(x, y, z)
   local track = track_from_key(x, y)
-  local beats_or_subs = beat_or_sub(track, x, y)
+  local b_or_s = beat_or_sub(track, x, y)
   if z == 1 then
     grid_key_held(x,y)
-    if beats_or_subs:selectable_at(x) then
+    if b_or_s:selectable_at(x) then
       p:stop()
-      track:select(beats_or_subs, x)
+      track:select(b_or_s, x)
       track:draw()
     end
   elseif z == 0 then
     local hold_time = grid_key_released(x,y)
     if hold_time > 1 then
       p:stop()
-      beats_or_subs:set_length(x)
+      b_or_s:set_length(x)
       track:draw()
     end
   end
-end
-
-function grid_key_held(x,y)
-  GRID_KEYS[x][y].down = true
-  GRID_KEYS[x][y].last_down = util.time()
-end
-
-function grid_key_released(x,y)
-  GRID_KEYS[x][y].down = false
-  GRID_KEYS[x][y].last_up = util.time()
-  return GRID_KEYS[x][y].last_up - GRID_KEYS[x][y].last_down
 end
 
 function beat_or_sub(track, x, y)
