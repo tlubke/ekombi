@@ -1,3 +1,14 @@
+-- key 3: play/pause
+-- 
+-- hold a key to change the
+--   length of the beats/subs
+--
+-- press a key on an even row
+--   to select a beat for editing
+--
+-- press a key on an odd row
+--   to toggle a sub on/off
+
 engine.name = 'Ack'
 
 local ack = require 'ack/lib/ack'
@@ -30,42 +41,16 @@ function grid_key_released(x,y)
   return GRID_KEYS[x][y].last_up - GRID_KEYS[x][y].last_down
 end
 
-
--- beat and subbeat are both cycle type tables
--- build a cycle class that puts itself on the end of the table
--- through iterations, keeps track of index of item.
--- e.g. {a, b, c} => a {b, c, a} => b {c, a, b} => c ...
--- calls a function anytime a cycle is complete
--- 
--- beat should notify pattern when a cycle is complete
--- if it is an 'independent track' in order to know
--- when to switch to the next pattern.
--- 
--- or, Cycle has a 'complete' boolean attribute, that can be reset.
-
--- controls behavior
---
--- 1 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, meta
---   | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16
--- 2 | 1, 2. 3, ... , meta
---   | ...
---
--- holding 'meta' brings up a mini-param menu for track options,
--- e.g. mute, steps per beat, "copy-track"/"paste-track" (could copy track pattern to others),
--- dependent/independent track.
--- 
--- a quick press to a 'beat' key will select that beat if it is valid, and change the sub-beat
--- row to display the sub-beats of selected. Refreshes a timer for 5 or so seconds every time an 
--- action on the given beat takes place, when that timer is reached ekombi goes back to displaying
--- the current beat of the pattern if it is playing.
---
--- a long press to a 'beat' key will change the amount of beats in the track, either extended it
--- or truncating it.
---
--- key 2 acts as a 'shift key' for selecting beats/sub-beats to edit parameters.
--- can only select more of the first type that was selected in one go.
--- i.e. if the first key 'selected' for parameter changing is a sub-beat,
--- the user can not then also select a 'beat' as they have different parameters.
+local midi_out_device = {}
+local midi_out_channel = {}
+local midi_out_note = {}
+local midi_notes_on = {}
+for i=1, MAX_TRACKS do
+  midi_out_device[i] = 1
+  midi_out_channel[i] = 1
+  midi_out_note[i] = 64
+  midi_notes_on[i] = {}
+end
 
 function has_one_type(tab)
   local i, v = next(tab, nil)
@@ -185,7 +170,7 @@ function make(track)
     d = #track.beat.subs
     track:draw()
     if track.beat.on and track.beat.sub_beat.on then
-      engine.trig(track.num)
+      track:trig()
     end
     track:advance()
   end
@@ -201,6 +186,27 @@ function Track:new(num, default_beats)
   o.beat = o.beats:next()
   o.clk = clock.run(make, o)
   return o
+end
+
+function Track:trig()
+  -- last midi notes off
+  all_notes_off(self.num)
+  
+  -- ack trig
+  engine.trig(self.num-1)
+  
+  -- crow trig
+  crow.output[self.num].execute()
+  
+  -- midi trig
+  midi_out_device[self.num]:note_on(midi_out_note[self.num], 96, midi_out_channel[self.num])
+  table.insert(midi_notes_on[self.num], {midi_out_note[self.num], 96, midi_out_channel[self.num]})
+  
+  -- load random sample for next trig
+  -- 1 == "off", 2 == "on"
+  if params:get(self.num.."_random") == 2 then
+    load_random(self.num)
+  end
 end
 
 function Track:advance_sub()
@@ -314,11 +320,56 @@ end
 -- initilization
 ----------------
 function init()
-  engine.loadSample(1, "/home/we/dust/audio/common/606/606-BD.wav")
-  engine.loadSample(2, "/home/we/dust/audio/common/606/606-SD.wav")
-  engine.loadSample(3, "/home/we/dust/audio/common/606/606-CH.wav")
-  engine.loadSample(4, "/home/we/dust/audio/common/606/606-OH.wav")
   p = Pattern:new(4, 4)
+  
+  params:add_separator("EKOMBI")
+
+  -- parameters
+  params:add_group("ack", 22*MAX_TRACKS)
+  for channel=1,MAX_TRACKS do
+    params:add_separator(channel)
+    params:add{type = "option", id = channel.. "_random", name = channel..": random sample",
+      options = {"off", "on"}}
+    ack.add_channel_params(channel)
+  end
+
+  params:add_group("midi",4*MAX_TRACKS)
+  for channel=1,MAX_TRACKS do
+    params:add_separator(channel)
+    params:add{type = "number", id = channel.. "_midi_out_device", name = channel .. ": MIDI device",
+      min = 1, max = 4, default = 1,
+      action = function(value) midi_out_device[channel] = value connect_midi() end}
+    params:add{type = "number", id = channel.. "_midi_out_channel", name = channel ..": MIDI channel",
+      min = 1, max = 16, default = 1,
+      action = function(value)
+        -- all_notes_off()
+        midi_out_channel[channel] = value end}
+    params:add{type = "number", id = channel.. "_midi_note", name = channel .. ": MIDI note",
+      min = 0, max = 127, default = 64,
+      action = function(value)
+        midi_out_note[channel] = value end}
+  end
+
+  for channel=1,MAX_TRACKS do
+    crow.output[channel].action = "{to(10,0.001),to(0,0.001)}"
+  end
+
+  params:read("ekombi-v2.pset")
+
+  connect_midi(MAX_TRACKS)
+end
+
+function connect_midi(n)
+  for channel=1, n do
+    midi_out_device[channel] = midi.connect(params:get(channel.. "_midi_out_device"))
+  end
+end
+
+function all_notes_off(channel)
+  for i = 1, tab.count(midi_notes_on[channel]) do
+    midi_out_device[channel]:note_off(midi_notes_on[i])
+  end
+  midi_notes_on[channel] = {}
 end
 
 function g.key(x, y, z)
@@ -367,4 +418,21 @@ function key(n,z)
   elseif z == 0 then
     
   end
+end
+
+function load_random(track)
+  local files
+  local filepath = params:get(track.."_sample")
+  local filename = params:string(track.."_sample")
+  local dir = string.gsub(filepath, escape(filename), "")
+  if filename ~= "-" then
+    files = util.scandir(dir)
+    engine.loadSample(track-1, dir..files[math.random(1, #files)])
+  end
+end
+
+function escape (s)
+  s = string.gsub(s, "[%p%c]", function (c)
+    return string.format("%%%s", c) end)
+  return s
 end
