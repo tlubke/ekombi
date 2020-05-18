@@ -12,6 +12,7 @@
 engine.name = 'Ack'
 
 local ack = require 'ack/lib/ack'
+local pp = require 'ekombi-v2/lib/ParamsPage'
 
 local g = grid.connect()
 
@@ -19,8 +20,14 @@ local GRID_HEIGHT = g.rows
 local GRID_WIDTH = g.cols
 local MAX_TRACKS = g.rows/2 -- 2 rows per track required
 local MAX_BEATS = g.cols -- last column is meta-button
+local BEAT_PARAMS = params.new("Beats", "step-components")
+local SUBBEAT_PARAMS = params.new("Subs", "step-components")
+
+local BUF = {}
+local BUF_TYPE = nil
 
 local RUNNING = true
+local SHIFT = false
 
 local GRID_KEYS = {}
 for x=1, GRID_WIDTH do
@@ -95,7 +102,7 @@ end
 
 function Cycle:next()
   self.index = self.index + 1
-  if self.index > self.length then 
+  if self.index > self.length then
     self.cycled = true
     self.index = 1
   else
@@ -128,13 +135,13 @@ function Cycle:selectable_at(x)
   return self.length >= x
 end
 
-local SubBeat = {on = true, StepParams = {}}
+local SubBeat = {on = true, params = {}}
 function SubBeat:new()
   local o = {}
   self.__index = self
   setmetatable(o, self)
   o.on = true
-  o.StepParams = {}
+  o.params = {}
   return o
 end
 
@@ -252,6 +259,31 @@ function Track:select(beats_or_subs, x)
   end
 end
 
+function Track:edit(beats_or_subs, x)
+  -- assure that BUF contains either 
+  -- only Beats OR only SubBeats
+  if BUF_TYPE == nil then
+    BUF_TYPE = beats_or_subs.type
+    table.insert(BUF, beats_or_subs[x])
+    print(BUF_TYPE)
+    if BUF_TYPE == Beat then
+      pp.set_params(BEAT_PARAMS)
+    elseif BUF_TYPE == SubBeat then
+      pp.set_params(SUBBEAT_PARAMS)
+    end
+    return
+  elseif BUF_TYPE == beats_or_subs.type then
+    local key = tab.key(BUF, beats_or_subs[x])
+    if key then
+      table.remove(BUF, key)
+      print('r')
+    else
+      table.insert(BUF, beats_or_subs[x])
+      print('i')
+    end
+  end
+end
+
 function Track:draw()
   local s_row = (self.num * 2) - 1 
   local b_row = s_row + 1
@@ -259,12 +291,16 @@ function Track:draw()
   for x=1, self.beats.length do
     if self.beats[x] == self.beat then
       g:led(x, b_row, 12)
+      if not self.beats[x].on then
+        g:led(x, b_row, 6)
+      end
     else
       g:led(x, b_row, 8)
+      if not self.beats[x].on then
+        g:led(x, b_row, 4)
+      end
     end
-    if not self.beats[x].on then
-      g:led(x, b_row, 4)
-    end
+    if tab.contains(BUF, self.beats[x]) == true then g:led(x, b_row, 15) end
   end
   for x=(self.beats.length + 1), 16 do
     g:led(x, b_row, 0)
@@ -273,12 +309,16 @@ function Track:draw()
   for x=1, self.beat.subs.length do
     if self.beat.subs[x] == self.beat.sub_beat then
       g:led(x, s_row, 12)
+      if not self.beat.subs[x].on then
+        g:led(x, s_row, 6)
+      end
     else
       g:led(x, s_row, 8)
+      if not self.beat.subs[x].on then
+        g:led(x, s_row, 6)
+      end
     end
-    if not self.beat.subs[x].on then
-      g:led(x, s_row, 4)
-    end
+    if tab.contains(BUF, self.beat.subs[x]) then g:led(x, s_row, 15) end
   end
   for x=(self.beat.subs.length + 1), 16 do
     g:led(x, s_row, 0)
@@ -292,15 +332,22 @@ function Pattern:new(n_tracks, max_beats)
   self.__index = self
   setmetatable(o, self)
   o.tracks = {}
-  o.max_width = max_beats
+  o.n_tracks = n_tracks
+  o.max_beats = max_beats
   for i=1, n_tracks do
     o.tracks[i] = Track:new(i, max_beats)
   end
   return o
 end
 
+function Pattern:redraw()
+  for i=1, self.n_tracks do
+    self.tracks[i]:draw()
+  end
+end
+
 function Pattern:start()
-  for i=1, 4 do
+  for i=1, self.n_tracks do
     self.tracks[i]:reset()
     self.tracks[i]:start_clock()
     self.tracks[i]:draw()
@@ -309,7 +356,7 @@ function Pattern:start()
 end
 
 function Pattern:stop()
-  for i=1, 4 do
+  for i=1, self.n_tracks do
     self.tracks[i]:stop_clock()
     self.tracks[i]:draw()
   end
@@ -328,39 +375,126 @@ function init()
   params:add_group("ack", 22*MAX_TRACKS)
   for channel=1,MAX_TRACKS do
     params:add_separator(channel)
-    params:add{type = "option", id = channel.. "_random", name = channel..": random sample",
-      options = {"off", "on"}}
+    params:add{
+      type = "option",
+      id = channel.. "_random",
+      name = channel..": random sample",
+      options = {"off", "on"}
+    }
     ack.add_channel_params(channel)
   end
-
   params:add_group("midi",4*MAX_TRACKS)
   for channel=1,MAX_TRACKS do
     params:add_separator(channel)
-    params:add{type = "number", id = channel.. "_midi_out_device", name = channel .. ": MIDI device",
+    params:add{
+      type = "number",
+      id = channel.. "_midi_out_device",
+      name = channel .. ": MIDI device",
       min = 1, max = 4, default = 1,
-      action = function(value) midi_out_device[channel] = value connect_midi() end}
-    params:add{type = "number", id = channel.. "_midi_out_channel", name = channel ..": MIDI channel",
+      action = function(value) 
+        midi_out_device[channel] = value
+        connect_midi() 
+        end
+    }
+    params:add{type = "number",
+      id = channel.. "_midi_out_channel",
+      name = channel ..": MIDI channel",
       min = 1, max = 16, default = 1,
       action = function(value)
-        -- all_notes_off()
-        midi_out_channel[channel] = value end}
-    params:add{type = "number", id = channel.. "_midi_note", name = channel .. ": MIDI note",
+        midi_out_channel[channel] = value 
+        end
+    }
+    params:add{type = "number",
+      id = channel.. "_midi_note",
+      name = channel .. ": MIDI note",
       min = 0, max = 127, default = 64,
       action = function(value)
-        midi_out_note[channel] = value end}
+        midi_out_note[channel] = value
+        end
+    }
   end
-
   for channel=1,MAX_TRACKS do
     crow.output[channel].action = "{to(10,0.001),to(0,0.001)}"
   end
 
+  -- sub-beat parameters for step components
+  SUBBEAT_PARAMS:add{
+    type = "option",
+    id = "_on",
+    name = "note on",
+    options = {"off", "on"},
+    default = 2,
+    action = function(value)
+      if value == 1 then 
+        value = false 
+      else 
+        value = true 
+      end
+      for key,v in pairs(BUF) do
+        BUF[key].on = value
+        print(BUF[key].on)
+      end
+    end
+  }
+  SUBBEAT_PARAMS:add{type = "number", id = "_midi_note", name = ": MIDI note",
+    min = 0, max = 127, default = 64}
+  SUBBEAT_PARAMS:add{type = "option", id = "_random", name = ": random sample",
+    options = {"off", "on"}}
+  -- ack adds to global params, switch temporarily
+  local temp = params
+  params = SUBBEAT_PARAMS
+  ack.add_start_pos_param('')
+  ack.add_end_pos_param('')
+  ack.add_loop_param('')
+  ack.add_loop_point_param('')
+  ack.add_speed_param('')
+  ack.add_vol_param('')
+  ack.add_vol_env_atk_param('')
+  ack.add_vol_env_rel_param('')
+  ack.add_pan_param('')
+  ack.add_filter_cutoff_param('')
+  ack.add_filter_res_param('')
+  ack.add_filter_env_atk_param('')
+  ack.add_filter_env_rel_param('')
+  ack.add_filter_env_mod_param('')
+  ack.add_dist_param('')
+  for i=1, #SUBBEAT_PARAMS.params do
+    -- action is sending parameter info to 
+    -- every sub-beat in BUF for step components
+    SUBBEAT_PARAMS:set_action(i, 
+      function (value) 
+        local id = SUBBEAT_PARAMS:get_id(i)
+        local func = function(t) t[id] = value end
+        tab.apply(BUF, func)
+      end
+    )
+  end
+  params = temp
+
+  -- beat paramaters for step components
+  BEAT_PARAMS:add{type = "option", id = "_on", name = "note on",
+    options = {"off", "on"},
+    default = 2,
+    action = function(value)
+      if value == 1 then 
+        value = false 
+      else 
+        value = true 
+      end
+      for key,v in pairs(BUF) do
+        BUF[key].on = value
+        print(BUF[key].on)
+      end
+    end
+  }
+
   params:read("ekombi-v2.pset")
 
-  connect_midi(MAX_TRACKS)
+  connect_midi()
 end
 
-function connect_midi(n)
-  for channel=1, n do
+function connect_midi()
+  for channel=1, MAX_TRACKS do
     midi_out_device[channel] = midi.connect(params:get(channel.. "_midi_out_device"))
   end
 end
@@ -375,19 +509,29 @@ end
 function g.key(x, y, z)
   local track = track_from_key(x, y)
   local b_or_s = beat_or_sub(track, x, y)
+  local selectable = b_or_s:selectable_at(x)
   if z == 1 then
     grid_key_held(x,y)
-    if b_or_s:selectable_at(x) then
+    if selectable then
       p:stop()
-      track:select(b_or_s, x)
+      if SHIFT then 
+        track:edit(b_or_s, x)
+        pp.open()
+      else
+        track:select(b_or_s, x)
+      end
       track:draw()
     end
   elseif z == 0 then
-    local hold_time = grid_key_released(x,y)
-    if hold_time > 1 then
-      p:stop()
-      b_or_s:set_length(x)
-      track:draw()
+    if SHIFT then
+      return
+    else
+      local hold_time = grid_key_released(x,y)
+      if hold_time > 1 then
+        p:stop()
+        b_or_s:set_length(x)
+        track:draw()
+      end
     end
   end
 end
@@ -407,6 +551,12 @@ function track_from_key(grid_x, grid_y)
 end
 
 function key(n,z)
+  if pp.visible then
+    pp.key(n,z)
+    redraw()
+    return
+  end
+  
   if z == 1 then
     if n == 3 then
       if RUNNING then
@@ -414,10 +564,32 @@ function key(n,z)
       else
         p:start()
       end
+    elseif n==2 then
+      SHIFT = true
     end
   elseif z == 0 then
-    
+    if n == 2 then
+      SHIFT = false
+    end
   end
+end
+
+function enc(n, d)
+  if pp.visible then
+    pp.enc(n, d)
+    redraw()
+    return
+  end
+end
+
+function redraw()
+  -- draw step component param page
+  if pp.visible then 
+    pp.redraw() 
+    return
+  end
+  screen.clear()
+  screen.update()
 end
 
 function load_random(track)
@@ -435,4 +607,16 @@ function escape (s)
   s = string.gsub(s, "[%p%c]", function (c)
     return string.format("%%%s", c) end)
   return s
+end
+
+function pp.opened()
+  redraw()
+end
+
+function pp.closed()
+  SHIFT = false
+  BUF = {}
+  BUF_TYPE = nil
+  p:redraw()
+  redraw()
 end
