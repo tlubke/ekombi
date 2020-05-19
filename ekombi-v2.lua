@@ -23,7 +23,7 @@ local MAX_BEATS = g.cols -- last column is meta-button
 local BEAT_PARAMS = params.new("Beats", "step-components")
 local SUBBEAT_PARAMS = params.new("Subs", "step-components")
 
-local BUF = {}
+ BUF = {}
 local BUF_TYPE = nil
 
 local RUNNING = true
@@ -196,6 +196,11 @@ function Track:new(num, default_beats)
 end
 
 function Track:trig()
+  -- set step params
+  for k, v in pairs(self.beat.sub_beat.params) do
+    params:set(self.num..k, v)
+  end
+  
   -- last midi notes off
   all_notes_off(self.num)
   
@@ -265,7 +270,6 @@ function Track:edit(beats_or_subs, x)
   if BUF_TYPE == nil then
     BUF_TYPE = beats_or_subs.type
     table.insert(BUF, beats_or_subs[x])
-    print(BUF_TYPE)
     if BUF_TYPE == Beat then
       pp.set_params(BEAT_PARAMS)
     elseif BUF_TYPE == SubBeat then
@@ -432,7 +436,6 @@ function init()
       end
       for key,v in pairs(BUF) do
         BUF[key].on = value
-        print(BUF[key].on)
       end
     end
   }
@@ -464,7 +467,7 @@ function init()
     SUBBEAT_PARAMS:set_action(i, 
       function (value) 
         local id = SUBBEAT_PARAMS:get_id(i)
-        local func = function(t) t[id] = value end
+        local func = function(t) t.params[id] = value end
         tab.apply(BUF, func)
       end
     )
@@ -483,14 +486,29 @@ function init()
       end
       for key,v in pairs(BUF) do
         BUF[key].on = value
-        print(BUF[key].on)
+      end
+    end
+  }
+  BEAT_PARAMS:add{type = "number", id = "_speed", name = "steps per beat",
+    min = 1, max = 16, default = 1,
+    action = function(value)
+      for key,v in pairs(BUF) do
+        BUF[key].speed = value
       end
     end
   }
 
-  params:read("ekombi-v2.pset")
+  params:read(norns.state.data.."ekombi-v2-01.pset")
 
   connect_midi()
+end
+
+function tab.apply(tab, func)
+  local i, v = next(tab, nil)
+  while i do
+    func(v)
+    i, v = next(tab, i)
+  end
 end
 
 function connect_midi()
