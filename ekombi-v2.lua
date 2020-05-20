@@ -1,3 +1,5 @@
+-- key 2: Shift
+--
 -- key 3: play/pause
 -- 
 -- hold a key to change the
@@ -8,23 +10,29 @@
 --
 -- press a key on an odd row
 --   to toggle a sub on/off
+--
+-- hold shift and press a key
+--   to add to edit group.
+--
+-- step-components via
+--   edit group.
 
 engine.name = 'Ack'
 
-local ack = require 'ack/lib/ack'
-local pp = require 'ekombi-v2/lib/ParamsPage'
-
+local ack = include 'ack/lib/ack'
+ pp = include 'ekombi-v2/lib/ParamsPage'
 local g = grid.connect()
+
+local Pattern = include 'ekombi-v2/lib/Pattern'
 
 local GRID_HEIGHT = g.rows
 local GRID_WIDTH = g.cols
 local MAX_TRACKS = g.rows/2 -- 2 rows per track required
-local MAX_BEATS = g.cols -- last column is meta-button
 local BEAT_PARAMS = params.new("Beats", "step-components")
 local SUBBEAT_PARAMS = params.new("Subs", "step-components")
-
- BUF = {}
+local BUF = {}
 local BUF_TYPE = nil
+local BUF_SUB_PATTERN = false
 
 local RUNNING = true
 local SHIFT = false
@@ -57,314 +65,6 @@ for i=1, MAX_TRACKS do
   midi_out_channel[i] = 1
   midi_out_note[i] = 64
   midi_notes_on[i] = {}
-end
-
-function has_one_type(tab)
-  local i, v = next(tab, nil)
-  local A = type(v)
-  repeat
-    if type(v) ~= A then
-      print("table "..self.." contains more than one type:", type(v), A)
-      return false
-    end
-    i, v = next(tab, i)
-  until(i == nil)
-  return true
-end
-
-local Cycle = {length = 0, index = 0, cycled = false}
-function Cycle:new(t, length)
-  local o = {}
-  self.__index = self
-  setmetatable(o, self)
-  o.type = t
-  o.length = length
-  o.index = 0
-  o.cycled = false
-  for i=1, o.length do
-    o[i] = o.type:new()
-  end
-  return o
-end
-
-function Cycle:from_table(t)
-  if has_one_type(t) then
-    local o = t
-    self.__index = self
-    setmetatable(o, self)
-    o.length = #o
-    o.index = 0
-    o.cycled = false
-    o.type = type(o[1])
-    return o
-  end
-end
-
-function Cycle:next()
-  self.index = self.index + 1
-  if self.index > self.length then
-    self.cycled = true
-    self.index = 1
-  else
-    self.cycled = false
-  end
-  return self[self.index]
-end
-
-function Cycle:reset()
-  self.index = 0
-  self.cycled = false
-end
-
-function Cycle:set_length(l)
-  if l <= 0 then
-    print("cannot change length of a cycle to 0 or a negative number")
-    return
-  end
-  while self.length < l do
-    self.length = self.length + 1
-    table.insert(self, self.length, self.type:new())
-  end
-  while self.length > l do
-    self.length = self.length - 1
-    table.remove(self, self.length)
-  end
-end
-
-function Cycle:selectable_at(x)
-  return self.length >= x
-end
-
-local SubBeat = {on = true, params = {}}
-function SubBeat:new()
-  local o = {}
-  self.__index = self
-  setmetatable(o, self)
-  o.on = true
-  o.params = {}
-  return o
-end
-
-function SubBeat:toggle()
-  self.on = not self.on
-end
-
-local Beat = {on = true, speed = 1, subs = {}, sub_beat = nil}
-function Beat:new()
-  local o = {}
-  self.__index = self
-  setmetatable(o, self)
-  o.on = true
-  o.speed = 1
-  o.subs = Cycle:new(SubBeat, 1)
-  o.sub_beat = o.subs:next()
-  return o
-end
-
-function Beat:toggle()
-  self.on = not self.on
-end
-
-function make(track)
-  local n = 1
-  local d = 1
-  while true do
-    clock.sync(n/d)
-    -- lazy clock sync updating
-    -- for alligned sub-beats when
-    -- current beat is advanced.
-    n = track.beat.speed
-    d = #track.beat.subs
-    track:draw()
-    if track.beat.on and track.beat.sub_beat.on then
-      track:trig()
-    end
-    track:advance()
-  end
-end
-
-local Track = {num = 1, beat = nil, beats = {}, clk = nil}
-function Track:new(num, default_beats)
-  local o = {}
-  self.__index = self
-  setmetatable(o, self)
-  o.num = num
-  o.beats = Cycle:new(Beat, default_beats)
-  o.beat = o.beats:next()
-  o.clk = clock.run(make, o)
-  return o
-end
-
-function Track:trig()
-  -- set step params
-  for k, v in pairs(self.beat.sub_beat.params) do
-    params:set(self.num..k, v)
-  end
-  
-  -- last midi notes off
-  all_notes_off(self.num)
-  
-  -- ack trig
-  engine.trig(self.num-1)
-  
-  -- crow trig
-  crow.output[self.num].execute()
-  
-  -- midi trig
-  midi_out_device[self.num]:note_on(midi_out_note[self.num], 96, midi_out_channel[self.num])
-  table.insert(midi_notes_on[self.num], {midi_out_note[self.num], 96, midi_out_channel[self.num]})
-  
-  -- load random sample for next trig
-  -- 1 == "off", 2 == "on"
-  if params:get(self.num.."_random") == 2 then
-    load_random(self.num)
-  end
-end
-
-function Track:advance_sub()
-  self.beat.sub_beat = self.beat.subs:next()
-end
-
-function Track:advance_beat()
-  self.beat = self.beats:next()
-end
-
-function Track:advance()
-  self:advance_sub()
-  if self.beat.subs.cycled then
-    self:advance_beat()
-  end
-end
-
-function Track:reset()
-  self.beats:reset()
-  self.beat = self.beats:next()
-  self.beat.subs:reset()
-  self.beat.sub_beat = self.beat.subs:next()
-end
-
-function Track:start_clock()
-  if self.clk == nil then
-    self.clk = clock.run(make, self)
-  end
-end
-
-function Track:stop_clock()
-  if self.clk then
-    clock.cancel(self.clk)
-    self.clk = nil
-  end
-end
-
-function Track:select(beats_or_subs, x)
-  if beats_or_subs.type == Beat then
-    self.beat = beats_or_subs[x]
-  elseif beats_or_subs.type == SubBeat then
-    self.beat.subs[x]:toggle()
-  end
-end
-
-function Track:edit(beats_or_subs, x)
-  -- assure that BUF contains either 
-  -- only Beats OR only SubBeats
-  if BUF_TYPE == nil then
-    BUF_TYPE = beats_or_subs.type
-    table.insert(BUF, beats_or_subs[x])
-    if BUF_TYPE == Beat then
-      pp.set_params(BEAT_PARAMS)
-    elseif BUF_TYPE == SubBeat then
-      pp.set_params(SUBBEAT_PARAMS)
-    end
-    return
-  elseif BUF_TYPE == beats_or_subs.type then
-    local key = tab.key(BUF, beats_or_subs[x])
-    if key then
-      table.remove(BUF, key)
-      print('r')
-    else
-      table.insert(BUF, beats_or_subs[x])
-      print('i')
-    end
-  end
-end
-
-function Track:draw()
-  local s_row = (self.num * 2) - 1 
-  local b_row = s_row + 1
-  -- draw beats
-  for x=1, self.beats.length do
-    if self.beats[x] == self.beat then
-      g:led(x, b_row, 12)
-      if not self.beats[x].on then
-        g:led(x, b_row, 6)
-      end
-    else
-      g:led(x, b_row, 8)
-      if not self.beats[x].on then
-        g:led(x, b_row, 4)
-      end
-    end
-    if tab.contains(BUF, self.beats[x]) == true then g:led(x, b_row, 15) end
-  end
-  for x=(self.beats.length + 1), 16 do
-    g:led(x, b_row, 0)
-  end
-  -- draw subdivisions
-  for x=1, self.beat.subs.length do
-    if self.beat.subs[x] == self.beat.sub_beat then
-      g:led(x, s_row, 12)
-      if not self.beat.subs[x].on then
-        g:led(x, s_row, 6)
-      end
-    else
-      g:led(x, s_row, 8)
-      if not self.beat.subs[x].on then
-        g:led(x, s_row, 6)
-      end
-    end
-    if tab.contains(BUF, self.beat.subs[x]) then g:led(x, s_row, 15) end
-  end
-  for x=(self.beat.subs.length + 1), 16 do
-    g:led(x, s_row, 0)
-  end
-  g:refresh()
-end
-
-local Pattern = {tracks = {}, max_width = 0}
-function Pattern:new(n_tracks, max_beats)
-  local o = {}
-  self.__index = self
-  setmetatable(o, self)
-  o.tracks = {}
-  o.n_tracks = n_tracks
-  o.max_beats = max_beats
-  for i=1, n_tracks do
-    o.tracks[i] = Track:new(i, max_beats)
-  end
-  return o
-end
-
-function Pattern:redraw()
-  for i=1, self.n_tracks do
-    self.tracks[i]:draw()
-  end
-end
-
-function Pattern:start()
-  for i=1, self.n_tracks do
-    self.tracks[i]:reset()
-    self.tracks[i]:start_clock()
-    self.tracks[i]:draw()
-  end
-  RUNNING = true
-end
-
-function Pattern:stop()
-  for i=1, self.n_tracks do
-    self.tracks[i]:stop_clock()
-    self.tracks[i]:draw()
-  end
-  RUNNING = false
 end
 
 ----------------
@@ -526,35 +226,56 @@ end
 
 function g.key(x, y, z)
   local track = track_from_key(x, y)
-  local b_or_s = beat_or_sub(track, x, y)
+  local b_or_s = beats_or_subs(track, x, y)
   local selectable = b_or_s:selectable_at(x)
   if z == 1 then
     grid_key_held(x,y)
     if selectable then
       p:stop()
       if SHIFT then 
-        track:edit(b_or_s, x)
-        pp.open()
+        if BUF_SUB_PATTERN then
+          -- toggle sub-beat of all beats in step-component group
+          -- if in the same row and lengths were changed already.
+          for k, v in pairs(BUF) do
+            if tab.contains(track.beats, v) then
+              v.subs[x]:toggle()
+            end
+          end
+        else
+          add_to_buf(b_or_s, x)
+          pp.open()
+        end
       else
         track:select(b_or_s, x)
       end
       track:draw()
     end
   elseif z == 0 then
-    if SHIFT then
-      return
-    else
-      local hold_time = grid_key_released(x,y)
-      if hold_time > 1 then
-        p:stop()
+    local hold_time = grid_key_released(x,y)
+    if hold_time > 0.5 then
+      p:stop()
+      if SHIFT and BUF_TYPE == "Beat" then
+        -- set sub-beats of all beats in step-component group
+        -- if also in the same row
+        for k, v in pairs(BUF) do
+          if tab.contains(track.beats, v) then
+            v.subs:set_length(x)
+          end
+        end
+        BUF_SUB_PATTERN = true
+      else
+        -- nothing in step-component group
+        -- only set length of selected beat/sub-beat
         b_or_s:set_length(x)
-        track:draw()
       end
+      track:draw()
     end
   end
+  redraw()
+  g_redraw()
 end
 
-function beat_or_sub(track, x, y)
+function beats_or_subs(track, x, y)
   local m = y % 2
   if m == 1 then
     return track.beat.subs
@@ -563,8 +284,8 @@ function beat_or_sub(track, x, y)
   end
 end
 
-function track_from_key(grid_x, grid_y)
-  local n = (grid_y // 2) + (grid_y % 2)
+function track_from_key(x, y)
+  local n = (y // 2) + (y % 2)
   return p.tracks[n]
 end
 
@@ -579,8 +300,10 @@ function key(n,z)
     if n == 3 then
       if RUNNING then
         p:stop()
+        RUNNING = false
       else
         p:start()
+        RUNNING = true
       end
     elseif n==2 then
       SHIFT = true
@@ -598,6 +321,19 @@ function enc(n, d)
     redraw()
     return
   end
+end
+
+function g_redraw()
+  for x=1, g.cols do
+    for y=1, g.rows do
+      local track = track_from_key(x,y)
+      local b_or_s = beats_or_subs(track, x, y)
+      if tab.contains(BUF, b_or_s[x]) then 
+        g:led(x, y, 15) 
+      end
+    end
+  end
+  g:refresh()
 end
 
 function redraw()
@@ -635,6 +371,64 @@ function pp.closed()
   SHIFT = false
   BUF = {}
   BUF_TYPE = nil
+  BUF_SUB_PATTERN = false
   p:redraw()
   redraw()
 end
+
+function add_to_buf(beats_or_subs, x)
+  -- assure that BUF contains either
+  -- only Beats OR only SubBeats
+  if BUF_TYPE == nil then
+    BUF_TYPE = beats_or_subs.type.class_name
+    table.insert(BUF, beats_or_subs[x])
+    if BUF_TYPE == "Beat" then
+      pp.set_params(BEAT_PARAMS)
+    elseif BUF_TYPE == "SubBeat" then
+      pp.set_params(SUBBEAT_PARAMS)
+    end
+    return
+  elseif BUF_TYPE == beats_or_subs.type.class_name then
+    local key = tab.key(BUF, beats_or_subs[x])
+    if key then
+      table.remove(BUF, key)
+      print('r')
+    else
+      table.insert(BUF, beats_or_subs[x])
+      print('i')
+    end
+  end
+end
+
+function trig(track)
+  -- set step params
+  for k, v in pairs(track.beat.sub_beat.params) do
+    params:set(track.num..k, v)
+  end
+
+  -- last midi notes off
+  all_notes_off(track.num)
+
+  -- ack trig
+  engine.trig(track.num-1)
+
+  -- crow trig
+  crow.output[track.num].execute()
+
+  -- midi trig
+  midi_out_device[track.num]:note_on(midi_out_note[track.num], 96, midi_out_channel[track.num])
+  table.insert(midi_notes_on[track.num], {midi_out_note[track.num], 96, midi_out_channel[track.num]})
+
+  -- load random sample for next trig
+  -- 1 == "off", 2 == "on"
+  if params:get(track.num.."_random") == 2 then
+    load_random(track.num)
+  end
+end
+
+-- if beat buf
+-- and all subs in each row are the same length
+-- should be toggleable
+
+-- if beat added to beat buf, and beat lengths in row are different
+-- sub-beat row should be undrawn.

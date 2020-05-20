@@ -7,13 +7,19 @@ local pp = {
     oldpos = 0,
     group = false,
     alt = false,
+    fine = false,
     visible = false,
+    triggered = {},
 }
 
 local page = nil
 
 local function build_page()
     page = {}
+    if pp.params == nil then
+        page = nil
+        return
+    end
     local i = 1
     repeat
         if pp.params:visible(i) then table.insert(page, i) end
@@ -25,6 +31,10 @@ end
 
 local function build_sub(sub)
     page = {}
+    if pp.params == nil then
+        page = nil
+        return
+    end
     for i = 1,pp.params:get(sub) do
         if pp.params:visible(i + sub) then
             table.insert(page, i + sub)
@@ -53,25 +63,19 @@ local function reset()
     pp.pos = 0
     pp.oldpos = 0
     pp.group = false
-    pp.visible = false
-end
-
-local function init()
-    if page == nil then build_page() end
     pp.alt = false
     pp.fine = false
+    pp.visible = false
     pp.triggered = {}
 end
 
 function pp.open()
     pp.visible = true
-    print("open", pp.visible)
     pp.opened()
 end
 
 function pp.close()
     pp.visible = false
-    print("close", pp.visible)
     pp.closed()
 end
 
@@ -82,7 +86,7 @@ pp.closed = function() end
 pp.set_params = function(paramset)
     reset()
     pp.params = paramset
-    init()
+    build_page()
 end
 
 pp.key = function(n,z)
@@ -91,7 +95,6 @@ pp.key = function(n,z)
     elseif n==1 and z==0 then
         pp.alt = false
     end
-    build_page()
     -- EDIT
     if n==2 and z==1 then
         if pp.group==true then
