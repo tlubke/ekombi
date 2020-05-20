@@ -134,8 +134,8 @@ function init()
       else 
         value = true 
       end
-      for key,v in pairs(BUF) do
-        BUF[key].on = value
+      for _, sub_beat in pairs(BUF) do
+        sub_beat.on = value
       end
     end
   }
@@ -184,16 +184,16 @@ function init()
       else 
         value = true 
       end
-      for key,v in pairs(BUF) do
-        BUF[key].on = value
+      for _, beat in pairs(BUF) do
+        beat.on = value
       end
     end
   }
   BEAT_PARAMS:add{type = "number", id = "_speed", name = "steps per beat",
     min = 1, max = 16, default = 1,
     action = function(value)
-      for key,v in pairs(BUF) do
-        BUF[key].speed = value
+      for _, beat in pairs(BUF) do
+        beat.speed = value
       end
     end
   }
@@ -236,9 +236,9 @@ function g.key(x, y, z)
         if BUF_SUB_PATTERN then
           -- toggle sub-beat of all beats in step-component group
           -- if in the same row and lengths were changed already.
-          for k, v in pairs(BUF) do
-            if tab.contains(track.beats, v) then
-              v.subs[x]:toggle()
+          for _, beat in pairs(BUF) do
+            if tab.contains(track.beats, beat) then
+              beat.subs[x]:toggle()
             end
           end
         else
@@ -257,9 +257,9 @@ function g.key(x, y, z)
       if SHIFT and BUF_TYPE == "Beat" then
         -- set sub-beats of all beats in step-component group
         -- if also in the same row
-        for k, v in pairs(BUF) do
-          if tab.contains(track.beats, v) then
-            v.subs:set_length(x)
+        for _, beat in pairs(BUF) do
+          if tab.contains(track.beats, beat) then
+            beat.subs:set_length(x)
           end
         end
         BUF_SUB_PATTERN = true
@@ -324,14 +324,8 @@ function enc(n, d)
 end
 
 function g_redraw()
-  for x=1, g.cols do
-    for y=1, g.rows do
-      local track = track_from_key(x,y)
-      local b_or_s = beats_or_subs(track, x, y)
-      if tab.contains(BUF, b_or_s[x]) then 
-        g:led(x, y, 15) 
-      end
-    end
+  for _, step in pairs(BUF) do
+    g:led(step:x_pos(), step:y_pos(), 15)
   end
   g:refresh()
 end
@@ -369,6 +363,9 @@ end
 
 function pp.closed()
   SHIFT = false
+  for _, step in pairs(BUF) do
+    step.editing = false
+  end
   BUF = {}
   BUF_TYPE = nil
   BUF_SUB_PATTERN = false
@@ -381,6 +378,7 @@ function add_to_buf(beats_or_subs, x)
   -- only Beats OR only SubBeats
   if BUF_TYPE == nil then
     BUF_TYPE = beats_or_subs.type.class_name
+    beats_or_subs[x].editing = true
     table.insert(BUF, beats_or_subs[x])
     if BUF_TYPE == "Beat" then
       pp.set_params(BEAT_PARAMS)
@@ -391,9 +389,11 @@ function add_to_buf(beats_or_subs, x)
   elseif BUF_TYPE == beats_or_subs.type.class_name then
     local key = tab.key(BUF, beats_or_subs[x])
     if key then
+      beats_or_subs[x].editing = false
       table.remove(BUF, key)
       print('r')
     else
+      beats_or_subs[x].editing = true
       table.insert(BUF, beats_or_subs[x])
       print('i')
     end
@@ -402,8 +402,8 @@ end
 
 function trig(track)
   -- set step params
-  for k, v in pairs(track.beat.sub_beat.params) do
-    params:set(track.num..k, v)
+  for id, value in pairs(track.beat.sub_beat.params) do
+    params:set(track.num..id, value)
   end
 
   -- last midi notes off

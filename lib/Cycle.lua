@@ -13,16 +13,17 @@ local function has_one_type(tab)
     return true
 end
 
-function Cycle:new(t, length)
+function Cycle:new(p, t, length)
     local o = {}
     self.__index = self
     setmetatable(o, self)
+    o.parent = p
     o.type = t
     o.length = length
     o.index = 0
     o.cycled = false
     for i=1, o.length do
-        o[i] = o.type:new()
+        o[i] = o.type:new(o, i)
     end
     return o
 end

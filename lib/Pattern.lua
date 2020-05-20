@@ -9,7 +9,7 @@ function Pattern:new(n_tracks, max_beats)
     o.n_tracks = n_tracks
     o.max_beats = max_beats
     for i=1, n_tracks do
-        o.tracks[i] = Track:new(i, max_beats)
+        o.tracks[i] = Track:new(o, i, max_beats)
     end
     return o
 end

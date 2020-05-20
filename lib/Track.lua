@@ -22,12 +22,13 @@ local function make(track)
   end
 end
 
-function Track:new(num, default_beats)
+function Track:new(p, num, default_beats)
   local o = {}
   self.__index = self
   setmetatable(o, self)
+  o.parent = p
   o.num = num
-  o.beats = Cycle:new(Beat, default_beats)
+  o.beats = Cycle:new(o, Beat, default_beats)
   o.beat = o.beats:next()
   o.clk = clock.run(make, o)
   return o
