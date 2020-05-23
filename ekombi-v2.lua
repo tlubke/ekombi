@@ -235,14 +235,16 @@ function g.key(x, y, z)
       p:stop()
       if SHIFT == true then
         local added = add_to_buf(b_or_s, x)
-        if added then track.editing = true end
+        if added then track.editing = t end
         if t == "Beat" then
           if BUF_TYPE == "Beat"then
             track.editing_subs = b_or_s[x].subs
             for _, beat in pairs(BUF) do
-              if beat.subs:compare(b_or_s[x].subs) == false then
-                track.editing_subs = nil
-                break
+              if tab.contains(track.beats, beat) then
+                if beat.subs:compare(b_or_s[x].subs) == false then
+                  track.editing_subs = nil
+                  break
+                end
               end
             end
           end
@@ -399,7 +401,7 @@ pp.closed = function()
     step.editing = false
   end
   for _, track in pairs(p.tracks) do
-    track.editing = false
+    track.editing = nil
     track.editing_subs = nil
   end
   BUF = {}
