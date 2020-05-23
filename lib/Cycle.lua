@@ -76,4 +76,29 @@ function Cycle:selectable_at(x)
     return self.length >= x
 end
 
+function Cycle:notes_on_string()
+  s = '{ '
+  for i=1, self.length do
+    local bit = 0
+    if self[i].on then bit = 1 end
+    s = s..bit..' '
+  end
+  s = s..'}'
+  return s
+end
+
+function Cycle:compare(other)
+  if self.type.class_name ~= other.type.class_name then
+    return false
+  end
+  if self:notes_on_string() ~= other:notes_on_string() then
+    return false
+  end
+  return true
+end
+
+function Cycle:print()
+  print(self:notes_on_string())
+end
+
 return Cycle

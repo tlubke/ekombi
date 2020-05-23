@@ -1,5 +1,6 @@
 local Cycle = include 'ekombi-v2/lib/Cycle'
 local Beat = include 'ekombi-v2/lib/Beat'
+local SubBeat = include 'ekombi-v2/lib/SubBeat'
 local g = grid.connect()
 
 local Track = {num = 1, beat = nil, beats = {}, clk = nil }
@@ -28,6 +29,8 @@ function Track:new(p, num, default_beats)
   setmetatable(o, self)
   o.parent = p
   o.num = num
+  o.editing = false
+  o.editing_subs = nil
   o.beats = Cycle:new(o, Beat, default_beats)
   o.beat = o.beats:next()
   o.clk = clock.run(make, o)
@@ -70,16 +73,23 @@ function Track:stop_clock()
 end
 
 function Track:select(beats_or_subs, x)
-    if beats_or_subs.type == Beat then
+    if beats_or_subs.type.class_name == "Beat" then
         self.beat = beats_or_subs[x]
-    elseif beats_or_subs.type == SubBeat then
+    elseif beats_or_subs.type.class_name == "SubBeat" then
         self.beat.subs[x]:toggle()
     end
+end
+
+function Track:edit_subs(x)
+  if self.editing_subs == nil then
+    self.editing_subs = Cycle:new(self, SubBeat, x)
+  end
 end
 
 function Track:draw()
     local s_row = (self.num * 2) - 1
     local b_row = s_row + 1
+    
     -- draw beats
     for x=1, self.beats.length do
       if self.beats[x] == self.beat then
@@ -93,10 +103,22 @@ function Track:draw()
               g:led(x, b_row, 4)
           end
       end
+      if self.beats[x].editing then
+        g:led(x, b_row, 15)
+      end
     end
     for x=(self.beats.length + 1), 16 do
         g:led(x, b_row, 0)
     end
+
+    
+    if self.editing and self.editing_subs == nil then
+      for x=1, 16 do
+        g:led(x, s_row, 0)
+      end
+      return
+    end
+    
     -- draw subdivisions
     for x=1, self.beat.subs.length do
       if self.beat.subs[x] == self.beat.sub_beat then
@@ -110,10 +132,14 @@ function Track:draw()
               g:led(x, s_row, 6)
           end
       end
+      if self.beat.subs[x].editing then
+        g:led(x, b_row, 15)
+      end
     end
     for x=(self.beat.subs.length + 1), 16 do
         g:led(x, s_row, 0)
     end
+    
     g:refresh()
 end
 

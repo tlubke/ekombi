@@ -21,6 +21,10 @@ function Beat:toggle()
     self.on = not self.on
 end
 
+function Beat:get_track()
+  return self.parent.parent
+end
+
 function Beat:track_num()
   return self.parent.parent.num
 end

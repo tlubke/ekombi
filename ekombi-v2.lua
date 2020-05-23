@@ -20,7 +20,7 @@
 engine.name = 'Ack'
 
 local ack = include 'ack/lib/ack'
- pp = include 'ekombi-v2/lib/ParamsPage'
+local pp = include 'ekombi-v2/lib/ParamsPage'
 local g = grid.connect()
 
 local Pattern = include 'ekombi-v2/lib/Pattern'
@@ -32,7 +32,6 @@ local BEAT_PARAMS = params.new("Beats", "step-components")
 local SUBBEAT_PARAMS = params.new("Subs", "step-components")
 local BUF = {}
 local BUF_TYPE = nil
-local BUF_SUB_PATTERN = false
 
 local RUNNING = true
 local SHIFT = false
@@ -228,24 +227,46 @@ function g.key(x, y, z)
   local track = track_from_key(x, y)
   local b_or_s = beats_or_subs(track, x, y)
   local selectable = b_or_s:selectable_at(x)
+  local t = b_or_s.type.class_name
+  
   if z == 1 then
     grid_key_held(x,y)
     if selectable then
       p:stop()
-      if SHIFT then 
-        if BUF_SUB_PATTERN then
-          -- toggle sub-beat of all beats in step-component group
-          -- if in the same row and lengths were changed already.
-          for _, beat in pairs(BUF) do
-            if tab.contains(track.beats, beat) then
-              beat.subs[x]:toggle()
+      if SHIFT == true then
+        local added = add_to_buf(b_or_s, x)
+        if added then track.editing = true end
+        if t == "Beat" then
+          if BUF_TYPE == "Beat"then
+            track.editing_subs = b_or_s[x].subs
+            for _, beat in pairs(BUF) do
+              if beat.subs:compare(b_or_s[x].subs) == false then
+                track.editing_subs = nil
+                break
+              end
             end
           end
-        else
-          add_to_buf(b_or_s, x)
-          pp.open()
+          if BUF_TYPE == "SubBeat" then
+            track:select(b_or_s, x)
+          end
         end
-      else
+        if t == "SubBeat" then
+          if BUF_TYPE == "Beat" and track.editing_subs then
+            track.editing_subs[x]:toggle()
+            for _, beat in pairs(BUF) do
+              if tab.contains(track.beats, beat) then
+                beat.subs[x].on = track.editing_subs[x].on
+              end
+            end
+          end
+          if BUF_TYPE == "SubBeat" then
+            -- step already added or removed 
+            -- in add_to_buf()
+            -- nothing to do in this case.
+          end
+        end
+      end
+      if SHIFT == false then
         track:select(b_or_s, x)
       end
       track:draw()
@@ -254,16 +275,30 @@ function g.key(x, y, z)
     local hold_time = grid_key_released(x,y)
     if hold_time > 0.5 then
       p:stop()
-      if SHIFT and BUF_TYPE == "Beat" then
-        -- set sub-beats of all beats in step-component group
-        -- if also in the same row
-        for _, beat in pairs(BUF) do
-          if tab.contains(track.beats, beat) then
-            beat.subs:set_length(x)
+      if SHIFT == true then
+        if t == "Beat" then
+          -- holding won't affect beats
+          -- when editing groups of steps
+          if BUF_TYPE == "Beat" then end
+          if BUF_TYPE == "SubBeat" then end
+        end
+        if t == "SubBeat" then
+          if BUF_TYPE == "Beat" then
+            -- set sub-beats of all beats in step-component group
+            -- if also in the same row
+            for _, beat in pairs(BUF) do
+              if tab.contains(track.beats, beat) then
+                track:edit_subs(x)
+                beat.subs:set_length(x)
+              end
+            end
+          end
+          if BUF_TYPE == "SubBeat" then
+            -- nothing planned for this case yet
           end
         end
-        BUF_SUB_PATTERN = true
-      else
+      end
+      if SHIFT == false then
         -- nothing in step-component group
         -- only set length of selected beat/sub-beat
         b_or_s:set_length(x)
@@ -324,9 +359,6 @@ function enc(n, d)
 end
 
 function g_redraw()
-  for _, step in pairs(BUF) do
-    g:led(step:x_pos(), step:y_pos(), 15)
-  end
   g:refresh()
 end
 
@@ -357,25 +389,31 @@ function escape (s)
   return s
 end
 
-function pp.opened()
+pp.opened = function()
   redraw()
 end
 
-function pp.closed()
+pp.closed = function()
   SHIFT = false
   for _, step in pairs(BUF) do
     step.editing = false
   end
+  for _, track in pairs(p.tracks) do
+    track.editing = false
+    track.editing_subs = nil
+  end
   BUF = {}
   BUF_TYPE = nil
-  BUF_SUB_PATTERN = false
   p:redraw()
   redraw()
 end
 
 function add_to_buf(beats_or_subs, x)
-  -- assure that BUF contains either
-  -- only Beats OR only SubBeats
+  -- returns a boolean of whether or not
+  -- beats_or_subs was added to BUF.
+  -- BUF should contain only Beats 
+  -- OR only SubBeats
+  
   if BUF_TYPE == nil then
     BUF_TYPE = beats_or_subs.type.class_name
     beats_or_subs[x].editing = true
@@ -385,7 +423,8 @@ function add_to_buf(beats_or_subs, x)
     elseif BUF_TYPE == "SubBeat" then
       pp.set_params(SUBBEAT_PARAMS)
     end
-    return
+    pp.open()
+    return true
   elseif BUF_TYPE == beats_or_subs.type.class_name then
     local key = tab.key(BUF, beats_or_subs[x])
     if key then
@@ -397,7 +436,9 @@ function add_to_buf(beats_or_subs, x)
       table.insert(BUF, beats_or_subs[x])
       print('i')
     end
+    return true
   end
+  return false
 end
 
 function trig(track)
@@ -425,10 +466,3 @@ function trig(track)
     load_random(track.num)
   end
 end
-
--- if beat buf
--- and all subs in each row are the same length
--- should be toggleable
-
--- if beat added to beat buf, and beat lengths in row are different
--- sub-beat row should be undrawn.
