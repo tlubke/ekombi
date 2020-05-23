@@ -23,15 +23,14 @@ local function make(track)
   end
 end
 
-function Track:new(p, num, default_beats)
+function Track:new(num, default_beats)
   local o = {}
   self.__index = self
   setmetatable(o, self)
-  o.parent = p
   o.num = num
   o.editing = nil
   o.editing_subs = nil
-  o.beats = Cycle:new(o, Beat, default_beats)
+  o.beats = Cycle:new(Beat, default_beats)
   o.beat = o.beats:next()
   o.clk = clock.run(make, o)
   return o
@@ -82,126 +81,91 @@ end
 
 function Track:edit_subs(x)
   if self.editing_subs == nil then
-    self.editing_subs = Cycle:new(self, SubBeat, x)
+    self.editing_subs = Cycle:new(SubBeat, x)
   end
 end
 
 function Track:draw()
-    local s_row = (self.num * 2) - 1
-    local b_row = s_row + 1
-
-    ----------------
-    -- special cases
-    ----------------
-    if self.editing then
-      --------
-      -- beats
-      --------
-      for x=1, self.beats.length do
-        -- highlight beats if
-        -- in group edit
-        if self.beats[x].editing then
-          g:led(x, b_row, 15)
-        else
-          if self.editing == "Beat" then
-            -- don't show "current" beat
-            -- when editing beats
-            g:led(x, b_row, 8)
-            if not self.beats[x].on then
-              g:led(x, b_row, 4)
-            end
-          end
-          if self.editing == "SubBeat" then
-            -- show selected beat
-            -- when editing subs
-            if self.beats[x] == self.beat then
-              g:led(x, b_row, 12)
-              if not self.beats[x].on then
-                g:led(x, b_row, 6)
-              end
-            else
-              g:led(x, b_row, 8)
-              if not self.beats[x].on then
-                g:led(x, b_row, 4)
-              end
-            end
-          end
-        end
+  local s_row = (self.num * 2) - 1
+  local b_row = s_row + 1
+  local brightness = 0
+  local MAX = 15
+  local HIGH = 12
+  local MED = 8
+  local LOW = 4
+  
+  -- 0 out the track
+  for x=1, 16 do -- max beats should be in track
+    g:led(x, b_row, brightness)
+    g:led(x, s_row, brightness)
+  end
+  
+  for _, beat in pairs(self.beats:get()) do
+    if     beat == self.beat then
+      if beat.on == true then
+        brightness = HIGH
+        else 
+        brightness = HIGH/2 
       end
-      -- clear any
-      -- invalid beats
-      for x=(self.beats.length + 1), 16 do
-        g:led(x, b_row, 0)
-      end
-      -------
-      -- subs
-      -------
-      for x=1, self.beat.subs.length do
-        g:led(x, s_row, 8)
-        if not self.beat.subs[x].on then
-          g:led(x, s_row, 6)
-        end
-        if self.beat.subs[x].editing then
-          g:led(x, s_row, 15)
-        end
-      end
-      for x=(self.beat.subs.length + 1), 16 do
-        g:led(x, s_row, 0)
-      end
-      if self.editing == "Beat" and self.editing_subs == nil then
-        for x=1, 16 do
-          g:led(x, s_row, 0)
-        end
-      end
-      g:refresh()
-      return
-    end
-    
-    -----------------------
-    -- draw beats as normal
-    -----------------------
-    for x=1, self.beats.length do
-      if self.beats[x] == self.beat then
-        g:led(x, b_row, 12)
-        if not self.beats[x].on then
-          g:led(x, b_row, 6)
-        end
-      else
-        g:led(x, b_row, 8)
-        if not self.beats[x].on then
-          g:led(x, b_row, 4)
-        end
-      end
-      if self.beats[x].editing then
-        g:led(x, b_row, 15)
+    elseif beat ~= self.beat then
+      if beat.on == true then
+        brightness = MED
+        else 
+        brightness = MED/2 
       end
     end
-    for x=(self.beats.length + 1), 16 do
-      g:led(x, b_row, 0)
-    end
-    --------------------
-    -- draw subdivisions
-    --------------------
-    for x=1, self.beat.subs.length do
-      if self.beat.subs[x] == self.beat.sub_beat then
-        g:led(x, s_row, 12)
-        if not self.beat.subs[x].on then
-          g:led(x, s_row, 6)
-        end
-      else
-        g:led(x, s_row, 8)
-        if not self.beat.subs[x].on then
-          g:led(x, s_row, 6)
-        end
+    g:led(beat.num, b_row, brightness)
+  end
+  
+  for _, sub_beat in pairs(self.beat.subs:get()) do
+    if     sub_beat == self.beat.sub_beat then
+      if sub_beat.on then
+        brightness = HIGH
+        else 
+        brightness = HIGH/2 
       end
-      if self.beat.subs[x].editing then
-        g:led(x, b_row, 15)
+    elseif sub_beat ~= self.beat.sub_beat then
+      if sub_beat.on then
+        brightness = MED
+        else 
+        brightness = MED/2 
       end
     end
-    for x=(self.beat.subs.length + 1), 16 do
-      g:led(x, s_row, 0)
+    g:led(sub_beat.num, s_row, brightness)
+  end
+  
+  if     self.editing == "Beat" then
+    for _, beat in pairs(self.beats:get()) do
+      if     beat.editing then
+        brightness = MAX
+      elseif beat.on then
+        brightness = MED
+        else 
+        brightness = MED/2 
+      end
+      g:led(beat.num, b_row, brightness)
     end
-    g:refresh()
+    for _, sub_beat in pairs(self.beat.subs:get()) do
+      if self.editing_subs == nil then
+        brightness = 0
+        g:led(sub_beat.num, s_row, brightness)
+      end
+    end
+  elseif self.editing == "SubBeat" then
+    for _, beat in pairs(self.beats:get()) do
+    end
+    for _, sub_beat in pairs(self.beat.subs:get()) do
+      if     sub_beat.editing then
+        brightness = MAX
+      elseif sub_beat.on then
+        brightness = MED
+        else 
+        brightness = MED/2 
+      end
+      g:led(sub_beat.num, s_row, brightness)
+    end
+  end
+  g:refresh()
 end
 
 return Track

@@ -13,17 +13,16 @@ local function has_one_type(tab)
     return true
 end
 
-function Cycle:new(p, t, length)
+function Cycle:new(t, length)
     local o = {}
     self.__index = self
     setmetatable(o, self)
-    o.parent = p
     o.type = t
     o.length = length
     o.index = 0
     o.cycled = false
     for i=1, o.length do
-        o[i] = o.type:new(o, i)
+        o[i] = o.type:new(i)
     end
     return o
 end
@@ -64,7 +63,7 @@ function Cycle:set_length(l)
     end
     while self.length < l do
         self.length = self.length + 1
-        table.insert(self, self.length, self.type:new())
+        table.insert(self, self.length, self.type:new(self.length))
     end
     while self.length > l do
         self.length = self.length - 1
@@ -85,6 +84,14 @@ function Cycle:notes_on_string()
   end
   s = s..'}'
   return s
+end
+
+function Cycle:get()
+  local tab = {}
+  for i=1, self.length do
+    tab[i] = self[i]
+  end
+  return tab
 end
 
 function Cycle:compare(other)
