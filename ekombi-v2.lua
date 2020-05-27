@@ -21,7 +21,7 @@ engine.name = 'Ack'
 
 local ack = include 'ack/lib/ack'
 local pp = include 'ekombi-v2/lib/ParamsPage'
-local saving = include 'ekombi-v2/lib/Saving'
+saving = include 'ekombi-v2/lib/Saving'
 local g = grid.connect()
 
 local Pattern = include 'ekombi-v2/lib/Pattern'
@@ -83,6 +83,16 @@ function init()
   p:start()
  
   params:add_separator("EKOMBI")
+
+  params:add{
+    type = "trigger",
+    id = "save_pattern",
+    name = "save pattern",
+    action = 
+      function()
+        save_pattern(PNUM)
+      end
+  }
 
   params:add{
     type = "trigger",
