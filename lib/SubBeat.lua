@@ -1,4 +1,10 @@
-local SubBeat = {class_name = "SubBeat", editing = false, on = true, params = {}}
+local SubBeat = {
+  class_name = "SubBeat",
+  editing = false,
+  on = true,
+  params = {}
+}
+
 function SubBeat:new(n)
     local o = {}
     self.__index = self

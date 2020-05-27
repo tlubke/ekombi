@@ -3,7 +3,14 @@ local Beat = include 'ekombi-v2/lib/Beat'
 local SubBeat = include 'ekombi-v2/lib/SubBeat'
 local g = grid.connect()
 
-local Track = {num = 1, beat = nil, beats = {}, clk = nil }
+local Track = {
+  num = 1, 
+  beat = nil,
+  beats = {},
+  clk = nil,
+  editing = nil,
+  editing_subs = nil
+}
 
 local function make(track)
   local n = 1

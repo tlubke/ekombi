@@ -1,4 +1,8 @@
-local Cycle = {length = 0, index = 0, cycled = false }
+local Cycle = {
+  length = 0,
+  index = 0,
+  cycled = false
+}
 
 local function has_one_type(tab)
     local i, v = next(tab, nil)

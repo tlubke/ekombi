@@ -21,6 +21,7 @@ engine.name = 'Ack'
 
 local ack = include 'ack/lib/ack'
 local pp = include 'ekombi-v2/lib/ParamsPage'
+local saving = include 'ekombi-v2/lib/Saving'
 local g = grid.connect()
 
 local Pattern = include 'ekombi-v2/lib/Pattern'
@@ -32,6 +33,8 @@ local BEAT_PARAMS = params.new("Beats", "step-components")
 local SUBBEAT_PARAMS = params.new("Subs", "step-components")
 local BUF = {}
 local BUF_TYPE = nil
+local PNUM = 1
+local N_PATTERNS = n_patterns()
 
 local RUNNING = true
 local SHIFT = false
@@ -70,9 +73,44 @@ end
 -- initilization
 ----------------
 function init()
-  p = Pattern:new(4, 4)
-  
+  if N_PATTERNS <= 0 then
+    p = Pattern:new(MAX_TRACKS, GRID_WIDTH)
+    save_pattern(p, 1)
+    N_PATTERNS = 1
+  else
+    p = load_pattern(1)
+  end
+  p:start()
+ 
   params:add_separator("EKOMBI")
+
+  params:add{
+    type = "trigger",
+    id = "duplicate_pattern",
+    name = "duplicate pattern",
+    action = 
+      function()
+        duplicate_pattern(PNUM)
+        N_PATTERNS = N_PATTERNS + 1
+        PNUM = PNUM + 1
+        p = load_pattern(PNUM)
+      end
+  }
+  
+  params:add{
+    type = "trigger",
+    id = "delete_pattern",
+    name = "delete pattern",
+    action = 
+      function()
+        if N_PATTERNS > 1 then
+          delete_pattern(PNUM)
+          N_PATTERNS = N_PATTERNS - 1
+          PNUM = util.clamp(PNUM+1, 1, N_PATTERNS)
+          p = load_pattern(PNUM)
+        end
+      end
+  }
 
   -- parameters
   params:add_group("ack", 22*MAX_TRACKS)
@@ -309,7 +347,6 @@ function g.key(x, y, z)
     end
   end
   redraw()
-  g_redraw()
 end
 
 function beats_or_subs(track, x, y)
@@ -358,10 +395,17 @@ function enc(n, d)
     redraw()
     return
   end
-end
-
-function g_redraw()
-  g:refresh()
+  
+  if n == 1 then
+    local prev = PNUM
+    PNUM = util.clamp(PNUM+d, 1, N_PATTERNS)
+    if PNUM == prev then return end
+    p:stop()
+    p = load_pattern(PNUM)
+    p:stop()
+  end
+  
+  redraw()
 end
 
 function redraw()
@@ -371,6 +415,9 @@ function redraw()
     return
   end
   screen.clear()
+  screen.move(0,5)
+  screen.text(string.format("%02d",PNUM)..'/'..N_PATTERNS)
+  
   screen.update()
 end
 
