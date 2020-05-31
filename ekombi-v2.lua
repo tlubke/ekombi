@@ -21,7 +21,7 @@ engine.name = 'Ack'
 
 local ack = include 'ack/lib/ack'
 local pp = include 'ekombi-v2/lib/ParamsPage'
-saving = include 'ekombi-v2/lib/Saving'
+local saving = include 'ekombi-v2/lib/Saving'
 local g = grid.connect()
 
 local Pattern = include 'ekombi-v2/lib/Pattern'
@@ -74,14 +74,14 @@ end
 ----------------
 function init()
   if N_PATTERNS <= 0 then
-    p = Pattern:new(MAX_TRACKS, GRID_WIDTH)
+    p = Pattern:new(MAX_TRACKS, 4)
     save_pattern(p, 1)
     N_PATTERNS = 1
   else
     p = load_pattern(1)
   end
   p:start()
- 
+
   params:add_separator("EKOMBI")
 
   params:add{
@@ -90,7 +90,21 @@ function init()
     name = "save pattern",
     action = 
       function()
-        save_pattern(PNUM)
+        save_pattern(p, PNUM)
+      end
+  }
+  
+  params:add{
+    type = "trigger",
+    id = "clear_pattern",
+    name = "clear pattern",
+    action = 
+      function()
+        p:stop()
+        p = Pattern:new(MAX_TRACKS, 4)
+        p:stop()
+        p:redraw()
+        RUNNING = false
       end
   }
 
@@ -100,10 +114,14 @@ function init()
     name = "duplicate pattern",
     action = 
       function()
+        p:stop()
         duplicate_pattern(PNUM)
         N_PATTERNS = N_PATTERNS + 1
         PNUM = PNUM + 1
         p = load_pattern(PNUM)
+        p:stop()
+        p:redraw()
+        RUNNING = false
       end
   }
   
@@ -118,6 +136,7 @@ function init()
           N_PATTERNS = N_PATTERNS - 1
           PNUM = util.clamp(PNUM+1, 1, N_PATTERNS)
           p = load_pattern(PNUM)
+          p:redraw()
         end
       end
   }
@@ -208,14 +227,15 @@ function init()
   ack.add_filter_env_rel_param('')
   ack.add_filter_env_mod_param('')
   ack.add_dist_param('')
-  for i=1, #SUBBEAT_PARAMS.params do
+  for i=2, #SUBBEAT_PARAMS.params do
     -- action is sending parameter info to 
     -- every sub-beat in BUF for step components
     SUBBEAT_PARAMS:set_action(i, 
       function (value) 
         local id = SUBBEAT_PARAMS:get_id(i)
-        local func = function(t) t.params[id] = value end
-        tab.apply(BUF, func)
+        for _,  sub_beat in pairs(BUF) do
+          sub_beat.params[id] = value
+        end
       end
     )
   end
@@ -248,14 +268,6 @@ function init()
   params:read(norns.state.data.."ekombi-v2-01.pset")
 
   connect_midi()
-end
-
-function tab.apply(tab, func)
-  local i, v = next(tab, nil)
-  while i do
-    func(v)
-    i, v = next(tab, i)
-  end
 end
 
 function connect_midi()
@@ -397,6 +409,7 @@ function key(n,z)
       SHIFT = false
     end
   end
+  redraw()
 end
 
 function enc(n, d)
@@ -413,6 +426,7 @@ function enc(n, d)
     p:stop()
     p = load_pattern(PNUM)
     p:stop()
+    RUNNING = false
   end
   
   redraw()
@@ -427,6 +441,17 @@ function redraw()
   screen.clear()
   screen.move(0,5)
   screen.text(string.format("%02d",PNUM)..'/'..N_PATTERNS)
+  
+  if RUNNING then
+    screen.move(123,57)
+    screen.line_rel(6,3)
+    screen.line_rel(-6,3)
+    screen.fill()
+  else
+    screen.rect(123,57,2,6)
+    screen.rect(126,57,2,6)
+    screen.fill()
+  end
   
   screen.update()
 end

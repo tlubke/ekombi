@@ -18,6 +18,7 @@ local function set_meta_tables(pattern)
   setmetatable(pattern, Pattern)
   for _, track in pairs(pattern.tracks) do
     setmetatable(track, Track)
+    track.max_beats = pattern.max_beats
     setmetatable(track.beats, Cycle)
     setmetatable(Cycle, track.beats)
     track.beats.type = Beat
