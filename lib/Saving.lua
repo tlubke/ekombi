@@ -96,7 +96,7 @@ function save_pattern(pattern, pattern_num)
   end
   local file_path = pdir..pattern_num..".data"
   local err = tab.save(pattern, file_path)
-  print(err)
+  return err
 end
 
 function load_pattern(pattern_num)

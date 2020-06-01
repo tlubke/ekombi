@@ -473,11 +473,9 @@ function add_to_buf(beats_or_subs, x)
     if key then
       beats_or_subs[x].editing = false
       table.remove(BUF, key)
-      print('r')
     else
       beats_or_subs[x].editing = true
       table.insert(BUF, beats_or_subs[x])
-      print('i')
     end
     return true
   end
