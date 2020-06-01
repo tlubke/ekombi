@@ -102,7 +102,7 @@ function Track:draw()
   local LOW = 4
   
   -- 0 out the track
-  for x=1, 16 do -- max beats should be in track
+  for x=1, self.max_beats do -- max beats should be in track
     g:led(x, b_row, brightness)
     g:led(x, s_row, brightness)
   end

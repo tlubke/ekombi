@@ -70,8 +70,8 @@ function Cycle:set_length(l)
         table.insert(self, self.length, self.type:new(self.length))
     end
     while self.length > l do
-        self.length = self.length - 1
         table.remove(self, self.length)
+        self.length = self.length - 1
     end
 end
 

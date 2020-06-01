@@ -47,17 +47,6 @@ for x=1, GRID_WIDTH do
   end
 end
 
-function grid_key_held(x,y)
-  GRID_KEYS[x][y].down = true
-  GRID_KEYS[x][y].last_down = util.time()
-end
-
-function grid_key_released(x,y)
-  GRID_KEYS[x][y].down = false
-  GRID_KEYS[x][y].last_up = util.time()
-  return GRID_KEYS[x][y].last_up - GRID_KEYS[x][y].last_down
-end
-
 local midi_out_device = {}
 local midi_out_channel = {}
 local midi_out_note = {}
@@ -270,17 +259,20 @@ function init()
   connect_midi()
 end
 
-function connect_midi()
-  for channel=1, MAX_TRACKS do
-    midi_out_device[channel] = midi.connect(params:get(channel.. "_midi_out_device"))
-  end
+
+
+-----------
+-- controls
+-----------
+function grid_key_held(x,y)
+  GRID_KEYS[x][y].down = true
+  GRID_KEYS[x][y].last_down = util.time()
 end
 
-function all_notes_off(channel)
-  for i = 1, tab.count(midi_notes_on[channel]) do
-    midi_out_device[channel]:note_off(midi_notes_on[i])
-  end
-  midi_notes_on[channel] = {}
+function grid_key_released(x,y)
+  GRID_KEYS[x][y].down = false
+  GRID_KEYS[x][y].last_up = util.time()
+  return GRID_KEYS[x][y].last_up - GRID_KEYS[x][y].last_down
 end
 
 function g.key(x, y, z)
@@ -371,27 +363,12 @@ function g.key(x, y, z)
   redraw()
 end
 
-function beats_or_subs(track, x, y)
-  local m = y % 2
-  if m == 1 then
-    return track.beat.subs
-  else 
-    return track.beats
-  end
-end
-
-function track_from_key(x, y)
-  local n = (y // 2) + (y % 2)
-  return p.tracks[n]
-end
-
 function key(n,z)
   if pp.visible then
     pp.key(n,z)
     redraw()
     return
   end
-  
   if z == 1 then
     if n == 3 then
       if RUNNING then
@@ -418,7 +395,6 @@ function enc(n, d)
     redraw()
     return
   end
-  
   if n == 1 then
     local prev = PNUM
     PNUM = util.clamp(PNUM+d, 1, N_PATTERNS)
@@ -428,10 +404,14 @@ function enc(n, d)
     p:stop()
     RUNNING = false
   end
-  
   redraw()
 end
 
+
+
+----------
+-- display
+----------
 function redraw()
   -- draw step component param page
   if pp.visible then 
@@ -441,7 +421,6 @@ function redraw()
   screen.clear()
   screen.move(0,5)
   screen.text(string.format("%02d",PNUM)..'/'..N_PATTERNS)
-  
   if RUNNING then
     screen.move(123,57)
     screen.line_rel(6,3)
@@ -452,44 +431,24 @@ function redraw()
     screen.rect(126,57,2,6)
     screen.fill()
   end
-  
   screen.update()
 end
 
-function load_random(track)
-  local files
-  local filepath = params:get(track.."_sample")
-  local filename = params:string(track.."_sample")
-  local dir = string.gsub(filepath, escape(filename), "")
-  if filename ~= "-" then
-    files = util.scandir(dir)
-    engine.loadSample(track-1, dir..files[math.random(1, #files)])
-  end
+--------------------
+-- data manipulation
+--------------------
+function track_from_key(x, y)
+  local n = (y // 2) + (y % 2)
+  return p.tracks[n]
 end
 
-function escape (s)
-  s = string.gsub(s, "[%p%c]", function (c)
-    return string.format("%%%s", c) end)
-  return s
-end
-
-pp.opened = function()
-  redraw()
-end
-
-pp.closed = function()
-  SHIFT = false
-  for _, step in pairs(BUF) do
-    step.editing = false
+function beats_or_subs(track, x, y)
+  local m = y % 2
+  if m == 1 then
+    return track.beat.subs
+  else 
+    return track.beats
   end
-  for _, track in pairs(p.tracks) do
-    track.editing = nil
-    track.editing_subs = nil
-  end
-  BUF = {}
-  BUF_TYPE = nil
-  p:redraw()
-  redraw()
 end
 
 function add_to_buf(beats_or_subs, x)
@@ -523,6 +482,59 @@ function add_to_buf(beats_or_subs, x)
     return true
   end
   return false
+end
+
+pp.opened = function()
+  redraw()
+end
+
+pp.closed = function()
+  SHIFT = false
+  for _, step in pairs(BUF) do
+    step.editing = false
+  end
+  for _, track in pairs(p.tracks) do
+    track.editing = nil
+    track.editing_subs = nil
+  end
+  BUF = {}
+  BUF_TYPE = nil
+  p:redraw()
+  redraw()
+end
+
+
+
+----------------
+-- sound control
+----------------
+function connect_midi()
+  for channel=1, MAX_TRACKS do
+    midi_out_device[channel] = midi.connect(params:get(channel.. "_midi_out_device"))
+  end
+end
+
+function all_notes_off(channel)
+  for i = 1, tab.count(midi_notes_on[channel]) do
+    midi_out_device[channel]:note_off(midi_notes_on[i])
+  end
+  midi_notes_on[channel] = {}
+end
+
+function load_random(track)
+  local function escape (s)
+    s = string.gsub(s, "[%p%c]", function (c)
+      return string.format("%%%s", c) end)
+    return s
+  end
+  local files
+  local filepath = params:get(track.."_sample")
+  local filename = params:string(track.."_sample")
+  local dir = string.gsub(filepath, escape(filename), "")
+  if filename ~= "-" then
+    files = util.scandir(dir)
+    engine.loadSample(track-1, dir..files[math.random(1, #files)])
+  end
 end
 
 function trig(track)
