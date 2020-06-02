@@ -20,11 +20,11 @@
 engine.name = 'Ack'
 
 local ack = include 'ack/lib/ack'
-local pp = include 'ekombi-v2/lib/ParamsPage'
-local saving = include 'ekombi-v2/lib/Saving'
+local pp = include 'ekombi/lib/ParamsPage'
+local saving = include 'ekombi/lib/Saving'
 local g = grid.connect()
 
-local Pattern = include 'ekombi-v2/lib/Pattern'
+local Pattern = include 'ekombi/lib/Pattern'
 
 local GRID_HEIGHT = g.rows
 local GRID_WIDTH = g.cols

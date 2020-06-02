@@ -1,8 +1,8 @@
-local Pattern = include 'ekombi-v2/lib/Pattern'
-local Track = include 'ekombi-v2/lib/Track'
-local Cycle = include 'ekombi-v2/lib/Cycle'
-local Beat = include 'ekombi-v2/lib/Beat'
-local SubBeat = include 'ekombi-v2/lib/SubBeat'
+local Pattern = include 'ekombi/lib/Pattern'
+local Track = include 'ekombi/lib/Track'
+local Cycle = include 'ekombi/lib/Cycle'
+local Beat = include 'ekombi/lib/Beat'
+local SubBeat = include 'ekombi/lib/SubBeat'
 
 local Saving = {}
 

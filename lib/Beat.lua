@@ -1,5 +1,5 @@
-local Cycle = include 'ekombi-v2/lib/Cycle'
-local SubBeat = include 'ekombi-v2/lib/SubBeat'
+local Cycle = include 'ekombi/lib/Cycle'
+local SubBeat = include 'ekombi/lib/SubBeat'
 
 local Beat = {
   class_name = "Beat",

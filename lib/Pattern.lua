@@ -1,4 +1,4 @@
-local Track = include 'ekombi-v2/lib/Track'
+local Track = include 'ekombi/lib/Track'
 
 local Pattern = {
   tracks = {},

@@ -1,6 +1,6 @@
-local Cycle = include 'ekombi-v2/lib/Cycle'
-local Beat = include 'ekombi-v2/lib/Beat'
-local SubBeat = include 'ekombi-v2/lib/SubBeat'
+local Cycle = include 'ekombi/lib/Cycle'
+local Beat = include 'ekombi/lib/Beat'
+local SubBeat = include 'ekombi/lib/SubBeat'
 local g = grid.connect()
 
 local Track = {
