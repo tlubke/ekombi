@@ -63,7 +63,7 @@ end
 ----------------
 function init()
   if N_PATTERNS <= 0 then
-    p = Pattern:new(MAX_TRACKS, 4)
+    p = Pattern:new(MAX_TRACKS, GRID_WIDTH)
     save_pattern(p, 1)
     N_PATTERNS = 1
   else
@@ -90,7 +90,7 @@ function init()
     action = 
       function()
         p:stop()
-        p = Pattern:new(MAX_TRACKS, 4)
+        p = Pattern:new(MAX_TRACKS, GRID_WIDTH)
         p:stop()
         p:redraw()
         RUNNING = false
