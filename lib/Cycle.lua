@@ -79,15 +79,18 @@ function Cycle:selectable_at(x)
     return self.length >= x
 end
 
-function Cycle:notes_on_string()
+function Cycle:__tostring()
   s = '{ '
   for i=1, self.length do
-    local bit = 0
-    if self[i].on then bit = 1 end
-    s = s..bit..' '
+    s = s..tostring(self[i])..' '
   end
   s = s..'}'
   return s
+end
+
+function Cycle:__eq(other)
+
+  return (self.type.class_name == other.type.class_name) and (tostring(self) == tostring(other))
 end
 
 function Cycle:get()
@@ -98,18 +101,8 @@ function Cycle:get()
   return tab
 end
 
-function Cycle:compare(other)
-  if self.type.class_name ~= other.type.class_name then
-    return false
-  end
-  if self:notes_on_string() ~= other:notes_on_string() then
-    return false
-  end
-  return true
-end
-
 function Cycle:print()
-  print(self:notes_on_string())
+  print(tostring(self))
 end
 
 return Cycle

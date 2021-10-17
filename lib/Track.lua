@@ -3,29 +3,39 @@ local Beat = include 'ekombi/lib/Beat'
 local SubBeat = include 'ekombi/lib/SubBeat'
 local g = grid.connect()
 
+local MAX = 15
+local HIGH = 12
+local MED = 8
+local LOW = 4
+
 local Track = {
   num = 1, 
   beat = nil,
   beats = {},
   clk = nil,
+  drawable_on_grid = true,
+  drawable_on_screen = true,
   editing = nil,
   editing_subs = nil
 }
 
 local function make(track)
-  local n = 1
-  local d = 1
+  clock.sync(1)
+
   while true do
-    clock.sync(n/d)
-    -- lazy clock sync updating
-    -- for alligned sub-beats when
-    -- current beat is advanced.
-    n = track.beat.speed
-    d = #track.beat.subs
-    track:draw()
+    local n = track.beat.speed
+    local d = #track.beat.subs
+
     if track.beat.on and track.beat.sub_beat.on then
       trig(track)
     end
+
+    if track.beat.sub_beat.num == d then
+      clock.sync(1)
+    else
+      clock.sleep(clock.get_beat_sec() * (n/d))
+    end
+
     track:advance()
   end
 end
@@ -72,10 +82,10 @@ function Track:start_clock()
 end
 
 function Track:stop_clock()
-    if self.clk then
-      clock.cancel(self.clk)
-      self.clk = nil
-    end
+  if self.clk then
+    clock.cancel(self.clk)
+    self.clk = nil
+  end
 end
 
 function Track:select(beats_or_subs, x)
@@ -92,14 +102,52 @@ function Track:edit_subs(x)
   end
 end
 
-function Track:draw()
+local norns_screen = function(str, x, y, b)
+  screen.font_face(2)
+  screen.level(0)
+  screen.rect(8 + (x - 1) * 7, y * 6 + 5, 3, -6) -- clear out area behind text
+  screen.fill()
+  screen.level(b)
+  screen.move(8 + (x - 1) * 7, y * 6 + 5)
+  screen.text(str)
+  screen_dirty = true
+  screen.font_face(1)
+end
+
+function Track:draw_screen()
+  if self.drawable_on_screen == false then return end
+
   local s_row = (self.num * 2) - 1
   local b_row = s_row + 1
   local brightness = 0
-  local MAX = 15
-  local HIGH = 12
-  local MED = 8
-  local LOW = 4
+
+  for x=1, self.max_beats do -- max beats should be in track
+    norns_screen("_", x, b_row, LOW)
+  end
+
+    for _, beat in pairs(self.beats:get()) do
+    if     beat == self.beat then
+      if beat.on == true then
+        brightness = HIGH
+        else
+        brightness = HIGH/2
+      end
+    elseif beat ~= self.beat then
+      if beat.on == true then
+        brightness = LOW
+        else
+        brightness = LOW/2
+      end
+    end
+
+    norns_screen(string.format("%X", #beat.subs), beat.num, b_row, brightness)
+  end
+end
+
+function Track:draw_grid()
+  local s_row = (self.num * 2) - 1
+  local b_row = s_row + 1
+  local brightness = 0
   
   -- 0 out the track
   for x=1, self.max_beats do -- max beats should be in track

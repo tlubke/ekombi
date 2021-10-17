@@ -28,4 +28,8 @@ function Beat:toggle()
     self.on = not self.on
 end
 
+function Beat:__tostring()
+  return tostring(self.subs)
+end
+
 return Beat

@@ -91,6 +91,7 @@ local function isdir(path)
 end
 
 function save_pattern(pattern, pattern_num)
+  pattern:stop()
   if not isdir(pdir) then
     os.execute("mkdir "..pdir)
   end
