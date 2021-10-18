@@ -20,20 +20,25 @@ local Track = {
 }
 
 local function make(track)
+  local beat = track.beat
+
   clock.sync(1)
 
   while true do
-    local n = track.beat.speed
-    local d = #track.beat.subs
+    local n =  beat.speed
+    local d = #beat.subs
 
-    if track.beat.on and track.beat.sub_beat.on then
+    if beat.on and beat.sub_beat.on then
       trig(track)
     end
 
-    if track.beat.sub_beat.num == d then
+    if beat.sub_beat.num == d then
       clock.sync(1)
     else
-      clock.sleep(clock.get_beat_sec() * (n/d))
+      local swing_multiplier = beat.sub_beat.num % 2 == 1 and (1 + beat.swing) or (1 - beat.swing)
+      local duration = clock.get_beat_sec() * (n/d) * swing_multiplier
+
+      clock.sleep(duration)
     end
 
     track:advance()

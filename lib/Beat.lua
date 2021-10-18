@@ -21,6 +21,7 @@ function Beat:new(n)
     o.speed = 1
     o.subs = Cycle:new(SubBeat, 1)
     o.sub_beat = o.subs:next()
+    o.swing = 0
     return o
 end
 

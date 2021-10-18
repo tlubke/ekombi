@@ -225,6 +225,14 @@ function init()
       end
     end
   }
+  BEAT_PARAMS:add{type = "taper", id = "_swing", name = "swing (0.0 - 1.0)",
+    min = 0, max = 1, default = 0, k = 0.01, units = "",
+    action = function(value)
+      for _, beat in pairs(BUF) do
+        beat.swing = value
+      end
+    end
+  }
 
   connect_midi()
 end
