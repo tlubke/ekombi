@@ -27,6 +27,7 @@ local Pattern = include 'ekombi/lib/Pattern'
 
 local GRID_HEIGHT = g.rows
 local GRID_WIDTH = g.cols
+local GRID_INVALID = GRID_HEIGHT == 0 or GRID_WIDTH == 0
 local MAX_TRACKS = g.rows/2 -- 2 rows per track required
 local BEAT_PARAMS = params.new("Beats", "step-components")
 local SUBBEAT_PARAMS = params.new("Subs", "step-components")
@@ -64,6 +65,10 @@ end
 -- initilization
 ----------------
 function init()
+  if GRID_INVALID then
+    return
+  end
+
   metro.init(function(c) redraw(); end, 1/15, -1):start()
 
   if N_PATTERNS <= 0 then
@@ -397,6 +402,14 @@ end
 -- display
 ----------
 
+function draw_grid_instruction()
+  screen.clear()
+  screen.level(15)
+  screen.move(128/2, 64/2)
+  screen.text_center("CONNECT GRID AND RESTART")
+  screen.update()
+end
+
 function draw_symbols()
   -- PLAY/PAUSE Symbol
   screen.level(15)
@@ -413,6 +426,11 @@ function draw_symbols()
 end
 
 function redraw()
+  if GRID_INVALID then
+    draw_grid_instruction()
+    return
+  end
+
   -- draw step component param page
   if pp.visible then
     pp.redraw()
