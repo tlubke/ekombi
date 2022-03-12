@@ -1,5 +1,5 @@
 # ekombi v2.0
-> polyrhythmic sequencer/sampler using Ack
+> polyrhythmic sequencer
 
 ## Requirements
 
