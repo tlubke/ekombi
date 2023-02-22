@@ -17,7 +17,7 @@
 -- step-components via
 --   edit group.
 
-engine.name = 'TestSine'
+engine.name = 'SimplePassThru'
 
 local pp = include 'ekombi/lib/ParamsPage'
 local saving = include 'ekombi/lib/Saving'
