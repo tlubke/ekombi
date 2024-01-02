@@ -20,26 +20,23 @@ local Track = {
 }
 
 local function make(track)
-  local beat = track.beat
 
   clock.sync(1)
 
   while true do
-    local n =  beat.speed
-    local d = #beat.subs
+    local n =  track.beat.speed
+    local d = #track.beat.subs
 
-    if beat.on and beat.sub_beat.on then
+    if track.beat.on and track.beat.sub_beat.on then
       trig(track)
     end
 
-    if beat.sub_beat.num == d then
-      clock.sync(1)
-    else
-      local swing_multiplier = beat.sub_beat.num % 2 == 1 and (1 + beat.swing) or (1 - beat.swing)
-      local duration = clock.get_beat_sec() * (n/d) * swing_multiplier
+    local swing_multiplier = track.beat.sub_beat.num % 2 == 1 and (1 + track.beat.swing) or (1 - track.beat.swing)
+    local duration = clock.get_beat_sec() * (n/d) * swing_multiplier
 
-      clock.sleep(duration)
-    end
+    -- sleep for most of the duration, then sync to the sub-division.
+    clock.sleep(duration * 0.99)
+    clock.sync(1/d)
 
     track:advance()
   end
@@ -110,10 +107,10 @@ end
 local norns_screen = function(str, x, y, b)
   screen.font_face(2)
   screen.level(0)
-  screen.rect(8 + (x - 1) * 7, y * 6 + 5, 3, -6) -- clear out area behind text
+  screen.rect(11 + (x - 1) * 7, y * 6 + 5, 3, -6) -- clear out area behind text
   screen.fill()
   screen.level(b)
-  screen.move(8 + (x - 1) * 7, y * 6 + 5)
+  screen.move(11 + (x - 1) * 7, y * 6 + 5)
   screen.text(str)
   screen_dirty = true
   screen.font_face(1)
@@ -126,12 +123,21 @@ function Track:draw_screen()
   local b_row = s_row + 1
   local brightness = 0
 
+  screen.font_face(2)
+  screen.level(0)
+  screen.rect(0, b_row * 6 + 5, 3, -6) -- clear out area behind text
+  screen.fill()
+  screen.level(15)
+  screen.move(0, b_row * 6 + 5)
+  screen.text(self.beat.speed)
+  screen.font_face(1)
+
   for x=1, self.max_beats do -- max beats should be in track
     norns_screen("_", x, b_row, LOW)
   end
 
-    for _, beat in pairs(self.beats:get()) do
-    if     beat == self.beat then
+  for _, beat in pairs(self.beats:get()) do
+    if   beat == self.beat then
       if beat.on == true then
         brightness = HIGH
         else
